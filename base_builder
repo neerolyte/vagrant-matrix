@@ -1,0 +1,82 @@
+#!/bin/bash -e
+
+cd "$(dirname "$0")"
+
+usage() {
+	echo \
+"base_builder
+
+Base Builder wraps up all the commands to create a box for Vagrant to use just from the defs.
+
+Usage: $0 [options]
+
+Options:
+    --proxy=http://proxy[:port]/
+    --mirror=http://example.com/foo"
+
+	exit 1
+}
+
+message() {
+	echo "========================================================"
+	echo "$@"
+	echo "========================================================"
+}
+
+# default config
+proxy=''
+mirror='http://mirror.aarnet.edu.au/pub/scientific/6/x86_64/os'
+name=sl6
+definition="$name"
+
+# parse cli options
+while true; do
+	# quit parsing if we're out of options
+	[[ -z "$1" ]] && break
+
+	case "$1" in
+		--proxy=*)
+			proxy="${1#*=}"
+			;;
+		--mirror=*)
+			mirror="${1#*=}"
+			;;
+		--help)
+			usage
+			;;
+		*)
+			usage
+			;;
+	esac
+
+	# get next arg
+	shift
+done
+
+message "Removing historic builds"
+rm -f "$name".box
+if vagrant box list | fgrep -xq -- "$name"; then
+	message "Removing old box from Vagrant"
+	vagrant box remove "$name"
+fi
+
+# replace the mirror place holder, it must always be replaced
+e="s|%MIRROR%|$mirror|g"
+if [[ ! -z $proxy ]]; then
+	e="$e;s|%PROXY%|--proxy=$proxy|g"
+else
+	e="$e;s|%PROXY%||g"
+fi
+
+# create out real ks.cfg file
+sed "$e" definitions/"$name"/ks.cfg.template > definitions/"$name"/ks.cfg
+
+message "Building"
+vagrant basebox build "$name"
+
+message "Exporting"
+sleep 5 # work around race condition where if you run export too quickly after build, it fails
+vagrant basebox export "$name"
+
+message "Adding to vagrant"
+vagrant box add "$name" "$name".box
