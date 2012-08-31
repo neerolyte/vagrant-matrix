@@ -23,11 +23,17 @@ message() {
 	echo "========================================================"
 }
 
+error() {
+	message "ERROR: $@"
+	exit 1
+}
+
 # default config
 proxy=''
 mirror='http://mirror.aarnet.edu.au/pub/scientific/6/x86_64/os'
 name=sl6
 definition="$name"
+vbox_version="$(VBoxManage -v | sed 's/_.*//g')"
 
 # parse cli options
 while true; do
@@ -62,11 +68,47 @@ fi
 
 # replace the mirror place holder, it must always be replaced
 e="s|%MIRROR%|$mirror|g"
-if [[ ! -z $proxy ]]; then
-	e="$e;s|%PROXY%|--proxy=$proxy|g"
-else
+
+# proxy not always set
+if [[ -z $proxy ]]; then
 	e="$e;s|%PROXY%||g"
+else
+	e="$e;s|%PROXY%|--proxy=$proxy|g"
 fi
+
+# cache VBoxGuestAdditions
+additions="VBoxGuestAdditions_$vbox_version.iso"
+dir=definitions/"$name"/cache
+if [[ ! -f "$dir/$additions" ]]; then
+	message "Caching Virtual Box Guest Additions"
+	url="http://download.virtualbox.org/virtualbox/$vbox_version/$additions"
+	tmp="$additions.tmp"
+	mkdir -p -- $dir
+	(
+		# save via a temporary file, if something barfs in wget "bash -e"
+		# should ensure we exit ungracefully (what we want)
+		cd -- definitions/"$name"/cache
+		wget -c "$url" -O "$tmp" || error Failed to download Guest Additions
+		mv -- "$tmp" "$additions"
+	)
+fi
+
+# Create sendable version of virtualbox.sh
+# wraps the binary guest additions .iso file inside the bash script
+template=definitions/"$name"/virtualbox.sh.template
+final=definitions/"$name"/virtualbox.sh
+message "Creating virtualbox.sh"
+# genuine entropy, chosen by fair dice roll
+entropy=52f2ba301c2e5055c6d15d7db61fbe01f556f62903239c29f606dddfaef6a7b2
+(
+	# create version of script with marker containing our generated one
+	sed "s/%MARKER%/$entropy/g" "$template"
+   	# make sure bash stops, then put the marker in
+	printf "\nexit\n$entropy\n"
+   	# put the additions themselves in
+	cat "$dir/$additions"
+) > "$final.tmp"
+mv -- "$final.tmp" "$final"
 
 # create out real ks.cfg file
 sed "$e" definitions/"$name"/ks.cfg.template > definitions/"$name"/ks.cfg

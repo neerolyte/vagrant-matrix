@@ -15,7 +15,12 @@ skipx
 zerombr
 
 clearpart --all --initlabel
-autopart
+# override standard partitions so as to assign everything to / (normally creates quite a large /home):
+part /boot --fstype ext3 --size=100
+part pv.01 --grow --size=1
+volgroup vg pv.01
+logvol --vgname vg / --size=1 --grow --name=root
+logvol --vgname vg swap --size=2048 --name=swap
 
 auth --useshadow --enablemd5
 firstboot --disabled
@@ -25,6 +30,7 @@ reboot
 #repo --name=puppetlabs --baseurl=http://yum.puppetlabs.com/el/6/products/x86_64/ --includepkgs='puppet,facter'
 #repo --name=puppetlabs-dependencies --baseurl=http://yum.puppetlabs.com/el/6/dependencies/x86_64/
 
+# install essential packages only
 %packages --nobase
 yum
 crontabs
@@ -44,25 +50,8 @@ make
 kernel-devel
 perl
 
-###%packages
-###@ core
-####ruby
-####ruby-devel
-####rubygems
-###bzip2
-###zlib-devel
-###openssl-devel
-###readline-devel
-####sqlite-devel
-####puppet
-####facter
-###
-###-ipw2100-firmware
-###-ipw2200-firmware
-###-ivtv-firmware
-
 %post
 /usr/sbin/groupadd vagrant
 /usr/sbin/useradd vagrant -g vagrant -G wheel
-echo "vagrant"|passwd --stdin vagrant
+echo "vagrant" | passwd --stdin vagrant
 echo "vagrant        ALL=(ALL)       NOPASSWD: ALL" >> /etc/sudoers

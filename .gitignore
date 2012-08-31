@@ -1,3 +1,6 @@
 .vagrant
 iso
 sl6.box
+definitions/*/cache
+definitions/sl6/virtualbox.sh
+definitions/sl6/ks.cfg
