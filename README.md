@@ -16,6 +16,8 @@ Now you can start the box:
 
 Stuff I want to fix...
 
+Get Matrix actually installing.
+
 cleanup.sh is mostly pointless and it currently requires needlessly populating yum cache.
 
 proxy and mirror settings should optionally be configured in to yum on the installed OS, not just used for base installation.

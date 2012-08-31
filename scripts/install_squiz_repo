@@ -1,0 +1,8 @@
+#!/bin/bash -e
+
+# Because we're working with Squiz Matrix, I'm going to prefer to use the
+# Squiz repo to get pcakages from - it includes puppet.
+
+if ! rpm -q squiz-repo > /dev/null; then
+	rpm -ivh /vagrant/scripts/squiz-repo-0.3-0-squiz.noarch.rpm
+fi
