@@ -1,6 +1,6 @@
 
 
-Install Vagrant and VeeWee.
+= Install Vagrant and VeeWee.
 
 Build base box:
 
