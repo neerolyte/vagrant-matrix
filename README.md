@@ -1,22 +1,28 @@
+# Overview
+
+Vagrant and VeeWee configuration for building Squiz Matrix VMs.
+
+Get Vagrant from: http://vagrantup.com/
+
+Get VeeWee from: https://github.com/jedi4ever/veewee
+
+# Building the base
+
+Eventually this will be optional, I'll host the box somewhere.
 
 
-= Building the base
-
-Install Vagrant and VeeWee.
 
 Use base_builder it'll translate some template files and kick off the basebox commands in the right order, it's got inbuilt help:
 
     ./base_builder --help
-
+    
 Now you can start the box:
 
     vagrant up
 
-= TODO
+# TODO
 
 Stuff I want to fix...
-
-Get Matrix actually installing.
 
 cleanup.sh is mostly pointless and it currently requires needlessly populating yum cache.
 
