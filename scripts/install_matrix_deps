@@ -1,0 +1,57 @@
+#!/bin/bash -e
+
+# List out any rpms we need to install
+rpms=(
+	httpd
+	php{,-{ldap,cli,pgsql,gd,soap,xml,mysql,pspell,mbstring}}
+	php-pear
+	zlib-devel
+	pcre-devel
+	tidy
+	antiword
+	poppler-utils
+	postgresql{,-contrib,-server}
+)
+
+# same for pear packages
+pears=(
+	Auth_SASL HTTP{,_Client,_Request} I18N_UnicodeNormalizer
+	Image_Canvas-0.3.3 Image_Color Image_Color MDB2 Mail Mail_Mime Mail_Queue
+	Mail_mimeDecode Math_Stats Net_SMTP Net_Socket Net_URL Numbers_Roman
+	SOAP-0.12.0 Services_JSON Text_Diff XML_HTMLSax XML_Parser
+	image_graph-0.8.0
+)
+
+# Because we're working with Squiz Matrix, I'm going to prefer to use the
+# Squiz repo to get pcakages from - it includes puppet.
+if ! rpm -q squiz-repo > /dev/null; then
+	rpm -ivh /vagrant/scripts/squiz-repo-0.3-0-squiz.noarch.rpm
+fi
+
+# install rpm packages that are missing
+missing=()
+for rpm in "${rpms[@]}"; do
+	if ! rpm -q "$rpm" > /dev/null; then
+		missing+=("$rpm")
+	fi
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+	yum install -y "${missing[@]}"
+fi
+
+# Put in a default timezeone for php to mute fairly pointless error under EL6.x:
+#     PHP Warning:  date(): It is not safe to rely on the system's timezone settings.
+php -r '$z = date_default_timezone_get(); echo "date.timezone=$z\n";' \
+	2> /dev/null > /etc/php.d/timezone_hack.ini
+
+# Install any missing pear packages
+missing=()
+for pear in "${pears[@]}"; do
+	if ! pear info "$pear" > /dev/null; then
+		missing+=("channel://pear.php.net/$pear")
+	fi
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+	pear channel-update pear.php.net
+	pear install "${missing[@]}"
+fi

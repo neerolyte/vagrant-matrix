@@ -36,11 +36,6 @@ Vagrant::Config.run do |config|
   # folder, and the third is the path on the host to the actual folder.
   # config.vm.share_folder "v-data", "/vagrant_data", "../data"
 
-  # We use the Squiz repo because it's got all the packages that aren't in SL6
-  # directly.
-  config.vm.provision :shell, :inline => "/vagrant/scripts/install_squiz_repo"
-
-  # Install puppet, use that to manage any other deps.
-  config.vm.provision :shell, :inline => "/vagrant/scripts/install_puppet"
-
+  # Install Matrix deps
+  config.vm.provision :shell, :inline => "/vagrant/scripts/install_matrix_deps"
 end

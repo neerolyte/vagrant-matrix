@@ -1,8 +1,0 @@
-#!/bin/bash -e
-
-# Install puppet (from squiz repo)
-
-# if not installed
-if ! rpm -q puppet > /dev/null; then
-	yum install -y puppet
-fi
