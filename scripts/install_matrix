@@ -1,0 +1,25 @@
+#!/bin/bash -ex
+
+version=4-10-1
+root=/var/www/matrix
+cache=/vagrant/cache/matrix
+
+# If our install success marker exists, we're already done.
+[[ -f $root/data/.installed ]] && exit
+
+# Remove any half finished installs
+rm -rf "$root"
+
+# Checkout code
+if [[ ! -d $cache ]]; then
+	mkdir -p "$(dirname "$cache")"
+	rm -rf -- "$cache.tmp"
+	/vagrant/scripts/checkout.sh "mysource_$version" "$cache.tmp"
+	mv -- "$cache.tmp" "$cache"
+fi
+
+# Copy code in to install dir
+cp -a -- "$cache" "$root"
+
+# Generate base config
+php "$root/install/step_01.php" "$root"

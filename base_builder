@@ -78,7 +78,7 @@ fi
 
 # cache VBoxGuestAdditions
 additions="VBoxGuestAdditions_$vbox_version.iso"
-dir=definitions/"$name"/cache
+dir=cache
 if [[ ! -f "$dir/$additions" ]]; then
 	message "Caching Virtual Box Guest Additions"
 	url="http://download.virtualbox.org/virtualbox/$vbox_version/$additions"
@@ -87,7 +87,7 @@ if [[ ! -f "$dir/$additions" ]]; then
 	(
 		# save via a temporary file, if something barfs in wget "bash -e"
 		# should ensure we exit ungracefully (what we want)
-		cd -- definitions/"$name"/cache
+		cd -- "$dir"
 		wget -c "$url" -O "$tmp" || error Failed to download Guest Additions
 		mv -- "$tmp" "$additions"
 	)

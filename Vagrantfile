@@ -38,4 +38,7 @@ Vagrant::Config.run do |config|
 
   # Install Matrix deps
   config.vm.provision :shell, :inline => "/vagrant/scripts/install_matrix_deps"
+
+  # Install Matrix
+  config.vm.provision :shell, :inline => "/vagrant/scripts/install_matrix"
 end
