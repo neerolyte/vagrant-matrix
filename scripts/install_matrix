@@ -2,24 +2,78 @@
 
 version=4-10-1
 root=/var/www/matrix
-cache=/vagrant/cache/matrix
+cache=/vagrant/cache
+dbuser=matrix
+dbuser2=matrix_secondary
+db=matrix
 
 # If our install success marker exists, we're already done.
 [[ -f $root/data/.installed ]] && exit
 
 # Remove any half finished installs
-rm -rf "$root"
+service postgresql stop
+rm -rf "$root" /var/lib/pgsql/data/*
 
 # Checkout code
-if [[ ! -d $cache ]]; then
-	mkdir -p "$(dirname "$cache")"
-	rm -rf -- "$cache.tmp"
-	/vagrant/scripts/checkout.sh "mysource_$version" "$cache.tmp"
-	mv -- "$cache.tmp" "$cache"
+if [[ ! -f $cache/matrix.tgz ]]; then
+	mkdir -p "$cache"
+	rm -rf -- "$cache/matrix"
+	/vagrant/scripts/checkout.sh "mysource_$version" "$cache/matrix"
+	(
+		cd "$cache"
+		tar czf matrix.tmp matrix
+	)
+	mv -- "$cache/matrix.tmp" "$cache/matrix.tgz"
 fi
 
+# Configure postgres
+(
+	cd /tmp
+	sudo -u postgres initdb --pgdata='/var/lib/pgsql/data' --auth='trust' --locale=C
+)
+service postgresql start
+chkconfig postgresql on
+
+# Create postgres users and DB
+createuser -SRDU postgres "$dbuser"
+createuser -SRDU postgres "$dbuser2"
+createdb -U postgres -E SQL_ASCII -O "$dbuser2" "$db"
+createlang -U postgres plpgsql "$db"
+
 # Copy code in to install dir
-cp -a -- "$cache" "$root"
+(
+	cd /var/www
+	tar xzf "$cache/matrix.tgz"
+)
 
 # Generate base config
 php "$root/install/step_01.php" "$root"
+
+# Configure Matrix
+cp /vagrant/scripts/templates/db.inc "$root"/data/private/conf/db.inc
+
+e="s%.*SQ_CONF_SYSTEM_ROOT_URLS.*%define('SQ_CONF_SYSTEM_ROOT_URLS', '192.168.33.10');%g"
+e="$e;s%.*SQ_CONF_DEFAULT_EMAIL.*%define('SQ_CONF_DEFAULT_EMAIL', 'root@matrix.vagrant');%g"
+e="$e;s%.*SQ_CONF_TECH_EMAIL.*%define('SQ_CONF_TECH_EMAIL', 'root@matrix.vagrant');%g"
+
+sed -i "$e" "$root"/data/private/conf/main.inc
+
+# Put schema in to DB
+php "$root/install/step_02.php" "$root"
+
+# Put data in
+php "$root/install/compile_locale.php" "$root"
+php "$root/install/step_03.php" "$root"
+php "$root/install/compile_locale.php" "$root"
+
+# Clean up permissions
+chown -R root.root "$root"
+chown -R apache.apache "$root"/{cache,/data}
+
+# Configure apache
+cp /vagrant/scripts/templates/matrix-vhost.conf /etc/httpd/conf.d/matrix-vhost.conf
+service httpd restart
+chkconfig httpd on
+
+# Success!
+touch "$root/data/.installed"
