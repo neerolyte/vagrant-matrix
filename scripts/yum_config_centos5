@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# configure yum proxy
+cat > /etc/yum.repos.d/CentOS-Base.repo <<"EOF"
+[base]
+name=CentOS-$releasever - Base
+baseurl=http://mirror.internode.on.net/pub/centos/$releasever/os/$basearch/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-5
+
+#released updates 
+[updates]
+name=CentOS-$releasever - Updates
+baseurl=http://mirror.internode.on.net/pub/centos/$releasever/updates/$basearch/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-5
+
+#additional packages that may be useful
+[extras]
+name=CentOS-$releasever - Extras
+baseurl=http://mirror.internode.on.net/pub/centos/$releasever/extras/$basearch/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-5
+EOF
+
+rm -f CentOS-Debuginfo.repo CentOS-Media.repo CentOS-Vault.repo
+
+# Because we're working with Squiz Matrix, I'm going to prefer to use the
+# Squiz repo to get packages from - it includes puppet.
+if ! rpm -q squiz-repo > /dev/null; then
+	rpm -ivh http://packages.squiz.net/centos/5/noarch/squiz-repo-0.1-3-squiz.noarch.rpm
+fi

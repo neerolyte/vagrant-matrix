@@ -1,0 +1,147 @@
+#!/bin/bash
+
+set -e
+command=''
+name='template'
+snapshots=/var/snapshots
+root=/var/www/matrix
+
+
+function main {
+	if ! [[ $(type -t "command_$command") == "function" ]]; then
+		echo "ERROR: Unknown command '$command', try --help"
+	fi
+
+	if ! [[ "$name" =~ ^[A-Za-z0-9_-]*$ ]]; then
+		echo "ERROR: snapshot names must be alphanumeric"
+		exit 1
+	fi
+	
+	command_$command
+}
+
+function help {
+	echo Snapper is a snapshot manager for Matrix
+	echo Designed to run under testing VMs only.
+	echo
+	echo "Usage: $0 [options] <command>"
+	echo
+	echo "Commands:"
+	echo "    create: creates a new snapshot"
+	echo "    restore: restores an existing snapshot"
+	echo "    list: list available snapshots"
+	echo "    remove: list available snapshots"
+	echo "    check: check if a given snapshot exists"
+	echo
+	echo "Options:"
+	echo "--debug: enable bash's debugging mode"
+	echo "-n|--name: name of the snapshot being created or restored"
+
+	exit 1
+}
+
+function command_create {
+	# snapshotting is pretty simple atm:
+	#   - create a dir on the FS for it
+	#   - copy data there
+	#   - backup the db
+	echo "Creating $name snapshot"
+
+	mkdir -p -- "$snapshots"
+
+	# clean up
+	dropdb -U postgres "snapshot_$name" > /dev/null 2>&1 || true
+	rm -rf -- "$snapshots/$name" "$snapshots/$name.tmp"
+
+	# copy FS
+	rsync -a --delete "$root/" "$snapshots/$name.tmp/"
+
+	# copy DB
+	psql -U postgres matrix -qc 'vacuum analyse;' 
+	createdb -U postgres -O squiz -T matrix "snapshot_$name"
+	psql -U postgres "snapshot_$name" -qc 'vacuum analyse;'
+
+	# mark complete
+	mv -- "$snapshots/$name.tmp" "$snapshots/$name"
+}
+
+function command_list {
+	ls -1 -- "$snapshots"
+}
+
+function command_check {
+	if [[ -d "$snapshots/$name" ]]; then
+		echo "$name exists"
+	else
+		echo "$name does not exist"
+		exit 1
+	fi
+}
+
+function command_remove {
+	rm -rf -- "$snapshots/$name"
+	dropdb -U postgres "snapshot_$name"
+}
+
+function command_restore {
+	# do fs and db operations in parallel
+	(
+		dropdb -U postgres matrix > /dev/null 2>&1 || true
+		createdb -U postgres -O squiz -T "snapshot_$name" matrix
+	) &
+	(
+		rsync \
+			--include "/data" \
+			--include "/cache" \
+			--include "/core" \
+			--include "/core/lib" \
+			--include "/core/lib/DAL" \
+			--include "/core/lib/DAL/Oven" \
+			--include "/core/lib/DAL/QueryStore" \
+			--include "/core/lib/DAL/*" \
+			--exclude "/core/lib/*" \
+			--exclude "/core/*" \
+			--exclude "/*" \
+			-a --delete \
+			"$snapshots/$name/" /var/www/matrix/
+	) &
+
+	# don't let the script return until they're both done
+	wait
+}
+
+# parse cli options
+while true; do
+	# quit if we're out of options (let the argument parsing commence)
+	[[ -z "$1" ]] && break
+	
+    case "$1" in
+        --debug)
+            set -x
+            ;;
+		--help)
+			help
+			;;
+		-n=*|--name=*)
+			name="${1#*=}"
+			;;
+		-n|--name)
+			# don't accept empty name
+			[[ -z "$2" ]] && help
+			name="$2"
+			shift
+			;;
+		-*)
+			echo "ERROR: unknown option $1"
+			help
+			;;
+        *)
+			command="$1"
+			;;
+    esac
+
+    # get next arg
+    shift
+done
+
+main

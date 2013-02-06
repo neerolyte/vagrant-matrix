@@ -1,10 +1,39 @@
 #!/bin/bash -e
 
+cd "$(dirname "$0")"
+
+os=sl6
+if grep -q '^CentOS release 5\.' /etc/redhat-release; then
+	os=centos5
+fi
+
+. ./yum_config_$os
+
+if [[ -f /etc/init.d/iptables ]]; then
+	# Turn the firewall off (it's just a dev VM after all...)
+	/etc/init.d/iptables stop
+	chkconfig iptables off
+fi
+
+proxyline=""
+if ! [[ -z $proxy ]]; then
+	proxyline="proxy=$proxy"
+fi
+
+# Configure hosts file
+if ! grep -q '^# Hosts configured by Vagrant' /etc/hosts; then
+	{
+		echo
+		echo "# Hosts configured by Vagrant"
+		echo "127.0.0.1 smpcontent.dev sitemigrator.dev"
+	} >> /etc/hosts
+fi
+
 # List out any rpms we need to install
 rpms=(
 	# direct matrix deps
 	httpd
-	php{,-{ldap,cli,pgsql,gd,soap,xml,mysql,pspell,mbstring,pear}}
+	php{,-{ldap,cli,pgsql,gd,soap,xml,mysql,mbstring,pear}}
 	zlib-devel pcre-devel tidy antiword poppler-utils
 	
 	# We're using postgres as the db
@@ -12,7 +41,17 @@ rpms=(
 
 	# cvs used for the matrix checkout.sh script
 	cvs
+
+	# used during template generation/restoration
+	rsync
+
+	# needed for guard
+	rubygems
 )
+
+if [[ $os == 'sl6' ]]; then
+	rpms+=(php-pspell)
+fi
 
 # same for pear packages
 pears=(
@@ -20,15 +59,10 @@ pears=(
 	Image_Canvas-0.3.3 Image_Color Image_Color MDB2 Mail Mail_Mime Mail_Queue
 	Mail_mimeDecode Math_Stats Net_SMTP Net_Socket Net_URL Numbers_Roman
 	SOAP-0.12.0 Services_JSON Text_Diff XML_HTMLSax XML_Parser
-	image_graph-0.8.0
+	image_graph-0.8.0 
 )
 
-# Because we're working with Squiz Matrix, I'm going to prefer to use the
-# Squiz repo to get pcakages from - it includes puppet.
-if ! rpm -q squiz-repo > /dev/null; then
-	rpm -ivh /vagrant/scripts/squiz-repo-0.3-0-squiz.noarch.rpm
-fi
-
+echo "Checking for missing rpm packages"
 # install rpm packages that are missing
 missing=()
 for rpm in "${rpms[@]}"; do
@@ -37,6 +71,7 @@ for rpm in "${rpms[@]}"; do
 	fi
 done
 if [[ ${#missing[@]} -gt 0 ]]; then
+	echo "Installing rpms: ${missing[@]}"
 	yum install -y "${missing[@]}"
 fi
 
@@ -45,14 +80,47 @@ fi
 php -r '$z = date_default_timezone_get(); echo "date.timezone=$z\n";' \
 	2> /dev/null > /etc/php.d/timezone_hack.ini
 
-# Install any missing pear packages
+echo "Checking for missing PEAR packages"
 missing=()
+# TODO: pear proxy seems to break with ACNG (pear sends https traffic towards a http only proxy)...
+# pear config-set http_proxy "$proxy"
 for pear in "${pears[@]}"; do
 	if ! pear info "$pear" > /dev/null; then
 		missing+=("channel://pear.php.net/$pear")
 	fi
 done
 if [[ ${#missing[@]} -gt 0 ]]; then
+	# pear in centos5 is kinda out of date
+	if [[ $os == "centos5" ]]; then
+		pear upgrade -f pear
+	fi
+	echo "Installing PEAR packages: ${missing[@]}"
 	pear channel-update pear.php.net
 	pear install "${missing[@]}"
+fi
+
+# Installing phpunit for SMP testing, it needs a separate channel.
+if ! pear list -c phpunit | egrep -q '^PHPUnit '; then
+	echo "Installing PHPUnit"
+	# channel-discover might return non-zero exit
+	pear channel-discover pear.phpunit.de || true
+	pear channel-discover pear.symfony.com || true
+	pear install phpunit/PHPUnit
+fi
+
+# Configure apache
+if [[ /vagrant/scripts/templates/apache-smp.conf -nt /etc/httpd/conf.d/smp.conf ]]; then
+	echo "Configuring Apache"
+    cp -f /vagrant/scripts/templates/apache-smp.conf /etc/httpd/conf.d/smp.conf
+    service httpd restart
+    chkconfig httpd on
+fi
+
+# don't install guard on centos5
+if [[ $os != "centos5" ]]; then
+	# install for autotesting
+	if ! gem list | grep "^guard-phpunit " -q; then
+		echo "Installing guard-phpunit"
+		gem install guard-phpunit
+	fi
 fi

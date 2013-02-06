@@ -1,0 +1,30 @@
+#!/bin/bash
+
+mirror=http://mirror.aarnet.edu.au/pub/scientific/6/x86_64/os
+
+# configure yum proxy
+cat > /etc/yum.repos.d/sl.repo <<EOF
+[sl]
+name=Scientific Linux \$releasever - \$basearch
+baseurl=$mirror
+$proxyline
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-sl file:///etc/pki/rpm-gpg/RPM-GPG-KEY-sl6 file:///etc/pki/rpm-gpg/RPM-GPG-KEY-cern
+
+[sl-security]
+name=Scientific Linux \$releasever - \$basearch - security updates
+baseurl=$mirror
+$proxyline
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-sl file:///etc/pki/rpm-gpg/RPM-GPG-KEY-sl6 file:///etc/pki/rpm-gpg/RPM-GPG-KEY-cern
+EOF
+
+rm -f /etc/yum.repos.d/sl-other.repo
+
+# Because we're working with Squiz Matrix, I'm going to prefer to use the
+# Squiz repo to get packages from - it includes puppet.
+if ! rpm -q squiz-repo > /dev/null; then
+    rpm -ivh http://packages.squiz.net/scientific/6/noarch/squiz-repo-0.3-0-squiz.noarch.rpm
+fi

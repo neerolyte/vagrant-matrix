@@ -5,3 +5,4 @@ definitions/*/cache
 definitions/sl6/virtualbox.sh
 definitions/sl6/ks.cfg
 cache
+.*.swp

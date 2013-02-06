@@ -1,79 +1,99 @@
-#!/bin/bash -ex
+#!/bin/bash -e
 
-version=4-10-1
+version=${1:-HEAD}
+tag="mysource_$version"
+if [[ $version == "HEAD" ]]; then
+	tag=HEAD
+fi
 root=/var/www/matrix
 cache=/vagrant/cache
-dbuser=matrix
-dbuser2=matrix_secondary
+dbuser=squiz
+dbuser2=squiz_secondary
 db=matrix
+domain=$(hostname -f)
+email=dschoen@squiz.net
+success_marker=$root/.success
 
 # If our install success marker exists, we're already done.
-[[ -f $root/data/.installed ]] && exit
+[[ -f $success_marker ]] && exit
+
+# Optionally upgrade success marker on older VMs
+# This should only occur on profile VMs.
+if [[ -f /var/www/template/.success ]] && [[ $domain != 'testing.sitemig.dev' ]]; then
+	touch "$success_marker"
+	exit
+fi
 
 # Remove any half finished installs
-service postgresql stop
+service postgresql stop || true
 rm -rf "$root" /var/lib/pgsql/data/*
 
 # Checkout code
-if [[ ! -f $cache/matrix.tgz ]]; then
+if [[ ! -f $cache/matrix_$tag.tgz ]]; then
+	echo "Checking out Matrix source code"
 	mkdir -p "$cache"
 	rm -rf -- "$cache/matrix"
-	/vagrant/scripts/checkout.sh "mysource_$version" "$cache/matrix"
+	/vagrant/scripts/checkout.sh "$tag" "$cache/matrix"
 	(
 		cd "$cache"
 		tar czf matrix.tmp matrix
 	)
-	mv -- "$cache/matrix.tmp" "$cache/matrix.tgz"
+	mv -- "$cache/matrix.tmp" "$cache/matrix_$tag.tgz"
 fi
 
-# Configure postgres
+echo "Configuring PostgreSQL"
 (
 	cd /tmp
 	sudo -u postgres initdb --pgdata='/var/lib/pgsql/data' --auth='trust' --locale=C
 )
+
+# if we're on the unit testing vm...
+if [[ $(hostname -f) == "testing.sitemig.dev" ]]; then
+	# disabling fsync results in a createdb (from template, used for snapper restore runs)
+	# dropping from about 2s to 0.2s
+	# this would be pathological for a prod system, but it's fine for unit testing
+	sed -i -r 's/^.*fsync\s*=.*$/fsync = off/g' /var/lib/pgsql/data/postgresql.conf
+fi
 service postgresql start
 chkconfig postgresql on
 
 # Create postgres users and DB
 createuser -SRDU postgres "$dbuser"
 createuser -SRDU postgres "$dbuser2"
-createdb -U postgres -E SQL_ASCII -O "$dbuser2" "$db"
+createdb -U postgres -E SQL_ASCII -O "$dbuser" "$db"
 createlang -U postgres plpgsql "$db"
 
-# Copy code in to install dir
+echo "Deploying Matrix code to install directory"
 (
 	cd /var/www
-	tar xzf "$cache/matrix.tgz"
+	tar xzf "$cache/matrix_$tag.tgz"
 )
 
-# Generate base config
+echo "Generate base config - step_01.php"
 php "$root/install/step_01.php" "$root"
 
-# Configure Matrix
+echo "Configuring Matrix"
 cp /vagrant/scripts/templates/db.inc "$root"/data/private/conf/db.inc
 
-e="s%.*SQ_CONF_SYSTEM_ROOT_URLS.*%define('SQ_CONF_SYSTEM_ROOT_URLS', '192.168.33.10');%g"
-e="$e;s%.*SQ_CONF_DEFAULT_EMAIL.*%define('SQ_CONF_DEFAULT_EMAIL', 'root@matrix.vagrant');%g"
-e="$e;s%.*SQ_CONF_TECH_EMAIL.*%define('SQ_CONF_TECH_EMAIL', 'root@matrix.vagrant');%g"
+# inlcude requested domain + sitemig.dev as a fall back
+e="s%.*SQ_CONF_SYSTEM_ROOT_URLS.*%define('SQ_CONF_SYSTEM_ROOT_URLS', '$domain\nsitemig.dev');%g"
+e="$e;s%.*SQ_CONF_DEFAULT_EMAIL.*%define('SQ_CONF_DEFAULT_EMAIL', '$email');%g"
+e="$e;s%.*SQ_CONF_TECH_EMAIL.*%define('SQ_CONF_TECH_EMAIL', '$email');%g"
+e="$e;s%.*SQ_CONF_DEBUG.*%define('SQ_CONF_DEBUG', 7);%g"
 
 sed -i "$e" "$root"/data/private/conf/main.inc
 
-# Put schema in to DB
+echo "Putting schema in to DB - step_02.php"
 php "$root/install/step_02.php" "$root"
 
-# Put data in
+echo "Putting data in to Matrix - step_03.php / compile_locale.php"
 php "$root/install/compile_locale.php" "$root"
 php "$root/install/step_03.php" "$root"
 php "$root/install/compile_locale.php" "$root"
 
-# Clean up permissions
+echo "Clean up permissions"
 chown -R root.root "$root"
 chown -R apache.apache "$root"/{cache,/data}
 
-# Configure apache
-cp /vagrant/scripts/templates/matrix-vhost.conf /etc/httpd/conf.d/matrix-vhost.conf
-service httpd restart
-chkconfig httpd on
-
 # Success!
-touch "$root/data/.installed"
+touch "$success_marker"
