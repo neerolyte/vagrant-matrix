@@ -30,7 +30,7 @@ rm -rf "$root" /var/lib/pgsql/data/*
 
 # Checkout code
 if [[ ! -f $cache/matrix_$tag.tgz ]]; then
-	echo "Checking out Matrix source code"
+	echo "Checking out Matrix source code for $tag"
 	mkdir -p "$cache"
 	rm -rf -- "$cache/matrix"
 	/vagrant/scripts/checkout.sh "$tag" "$cache/matrix"

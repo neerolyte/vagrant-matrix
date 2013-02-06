@@ -1,0 +1,6 @@
+#!/bin/bash -e
+
+# create a snapshot for testing to use
+if ! /vagrant/scripts/snapper -n testing check > /dev/null; then
+	/vagrant/scripts/snapper -n testing create
+fi
