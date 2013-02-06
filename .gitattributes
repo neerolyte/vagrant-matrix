@@ -1,0 +1,2 @@
+# We must retain Unix style line endings, even on Windows
+* text eol=lf
