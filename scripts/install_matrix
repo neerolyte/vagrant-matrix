@@ -1,12 +1,15 @@
 #!/bin/bash -e
 
+cd "$(dirname "$0")"
+scriptdir="$PWD"
+
 version=${1:-HEAD}
 tag="mysource_$version"
 if [[ $version == "HEAD" ]]; then
 	tag=HEAD
 fi
 root=/var/www/matrix
-cache=/vagrant/cache
+cache="$scriptdir/../cache"
 dbuser=squiz
 dbuser2=squiz_secondary
 db=matrix
@@ -33,7 +36,7 @@ if [[ ! -f $cache/matrix_$tag.tgz ]]; then
 	echo "Checking out Matrix source code for $tag"
 	mkdir -p "$cache"
 	rm -rf -- "$cache/matrix"
-	/vagrant/scripts/checkout.sh "$tag" "$cache/matrix"
+	./checkout.sh "$tag" "$cache/matrix"
 	(
 		cd "$cache"
 		tar czf matrix.tmp matrix
@@ -73,7 +76,7 @@ echo "Generate base config - step_01.php"
 php "$root/install/step_01.php" "$root"
 
 echo "Configuring Matrix"
-cp /vagrant/scripts/templates/db.inc "$root"/data/private/conf/db.inc
+cp "$scriptdir/templates/db.inc" "$root"/data/private/conf/db.inc
 
 # inlcude requested domain + sitemig.dev as a fall back
 e="s%.*SQ_CONF_SYSTEM_ROOT_URLS.*%define('SQ_CONF_SYSTEM_ROOT_URLS', '$domain\nsitemig.dev');%g"

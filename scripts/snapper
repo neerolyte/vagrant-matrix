@@ -4,8 +4,9 @@ set -e
 command=''
 name='template'
 snapshots=/var/snapshots
-root=/var/www/matrix
-
+parent=/var/www
+restore=matrix
+dbname=matrix
 
 function main {
 	if ! [[ $(type -t "command_$command") == "function" ]]; then
@@ -35,7 +36,8 @@ function help {
 	echo
 	echo "Options:"
 	echo "--debug: enable bash's debugging mode"
-	echo "-n|--name: name of the snapshot being created or restored"
+	echo "-n|--name: name to give the snapshot being created or restored"
+	echo "-r|--restore: name of the restore point, used for the fs and db name of the restored system and the source system during creation"
 
 	exit 1
 }
@@ -57,8 +59,8 @@ function command_create {
 	rsync -a --delete "$root/" "$snapshots/$name.tmp/"
 
 	# copy DB
-	psql -U postgres matrix -qc 'vacuum analyse;' 
-	createdb -U postgres -O squiz -T matrix "snapshot_$name"
+	psql -U postgres "$dbname" -qc 'vacuum analyse;' 
+	createdb -U postgres -O squiz -T "$dbname" "snapshot_$name"
 	psql -U postgres "snapshot_$name" -qc 'vacuum analyse;'
 
 	# mark complete
@@ -86,8 +88,8 @@ function command_remove {
 function command_restore {
 	# do fs and db operations in parallel
 	(
-		dropdb -U postgres matrix > /dev/null 2>&1 || true
-		createdb -U postgres -O squiz -T "snapshot_$name" matrix
+		dropdb -U postgres "$dbname" > /dev/null 2>&1 || true
+		createdb -U postgres -O squiz -T "snapshot_$name" "$dbname"
 	) &
 	(
 		rsync \
@@ -103,7 +105,7 @@ function command_restore {
 			--exclude "/core/*" \
 			--exclude "/*" \
 			-a --delete \
-			"$snapshots/$name/" /var/www/matrix/
+			"$snapshots/$name/" "$root/"
 	) &
 
 	# don't let the script return until they're both done
@@ -131,6 +133,15 @@ while true; do
 			name="$2"
 			shift
 			;;
+		-r=*|--restore=*)
+			restore="${1#*=}"
+			;;
+		-r|--restore)
+			# don't accept empty name
+			[[ -z "$2" ]] && help
+			restore="$2"
+			shift
+			;;
 		-*)
 			echo "ERROR: unknown option $1"
 			help
@@ -143,5 +154,8 @@ while true; do
     # get next arg
     shift
 done
+
+# variables that depend on cli args
+root="$parent/$restore"
 
 main
