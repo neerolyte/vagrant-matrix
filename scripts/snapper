@@ -6,7 +6,6 @@ name='template'
 snapshots=/var/snapshots
 parent=/var/www
 restore=matrix
-dbname=matrix
 
 function main {
 	if ! [[ $(type -t "command_$command") == "function" ]]; then
@@ -157,5 +156,6 @@ done
 
 # variables that depend on cli args
 root="$parent/$restore"
+dbname="$restore"
 
 main
