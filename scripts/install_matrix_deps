@@ -109,9 +109,9 @@ if ! pear list -c phpunit | egrep -q '^PHPUnit '; then
 fi
 
 # Configure apache
-if [[ /vagrant/scripts/templates/apache-smp.conf -nt /etc/httpd/conf.d/smp.conf ]]; then
+if [[ /vagrant/scripts/templates/apache-unversioned-include.conf -nt /etc/httpd/conf.d/unversioned-include.conf ]]; then
 	echo "Configuring Apache"
-    cp -f /vagrant/scripts/templates/apache-smp.conf /etc/httpd/conf.d/smp.conf
+    cp -f /vagrant/scripts/templates/apache-unversioned-include.conf /etc/httpd/conf.d/unversioned-include.conf
     service httpd restart
     chkconfig httpd on
 fi

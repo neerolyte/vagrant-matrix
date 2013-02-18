@@ -183,6 +183,7 @@ configure_apache() {
 
 	e="s/%NAME%/$name/g"
 	e="$e;s/%DOMAIN%/$domain/g"
+	mkdir -p /etc/httpd/conf/unversioned-sites
 	sed "$e" "$scriptdir/templates/matrix-vhost.conf" \
 		> /etc/httpd/conf/unversioned-sites/"$name".conf
 	service httpd reload
