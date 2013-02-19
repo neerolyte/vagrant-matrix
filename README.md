@@ -20,6 +20,8 @@ With SVN use a SVN external of (svn propedit svn:externals .):
 
 See Vagrantfile for an example of how to reference Vagrantfile.inc.rb
 
+It may be better to [reference a tag](https://github.com/neerolyte/vagrant-matrix/tags) to keep my changes from immediately breaking your project though.
+
 # Building the base
 
 Base box specs are managed as part of https://github.com/neerolyte/lyte-vagrant-boxes
