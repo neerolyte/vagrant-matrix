@@ -1,11 +1,6 @@
 #!/bin/bash
 
 set -e
-command=''
-name='template'
-snapshots=/var/snapshots
-parent=/var/www
-restore=matrix
 
 function main {
 	if ! [[ $(type -t "command_$command") == "function" ]]; then
@@ -30,13 +25,18 @@ function help {
 	echo "    create: creates a new snapshot"
 	echo "    restore: restores an existing snapshot"
 	echo "    list: list available snapshots"
-	echo "    remove: list available snapshots"
+	echo "    remove: remove the named snapshot"
 	echo "    check: check if a given snapshot exists"
+	echo "    build: install a fresh copy of matrix and then create a snapshot of it"
 	echo
 	echo "Options:"
 	echo "--debug: enable bash's debugging mode"
 	echo "-n|--name: name to give the snapshot being created or restored"
 	echo "-r|--restore: name of the restore point, used for the fs and db name of the restored system and the source system during creation"
+	echo "Build specific options:"
+	echo "--domain: The domain to put Matrix on"
+	echo "--version: The Matrix version X.Y.Z or 'HEAD'"
+	echo "--package: A local custom package to add to the install"
 
 	exit 1
 }
@@ -111,6 +111,21 @@ function command_restore {
 	wait
 }
 
+# Install Matrix from scratch and then take a snapshot
+function command_build {
+	command_install_matrix
+	command_create
+}
+
+# Install Matrix
+function command_install_matrix {
+	./install_matrix --version="$version" \
+		--name="$restore" \
+		--domain="$domain" \
+		--package="$package" \
+		--force
+}
+
 # parse cli options
 while true; do
 	# quit if we're out of options (let the argument parsing commence)
@@ -130,6 +145,33 @@ while true; do
 			# don't accept empty name
 			[[ -z "$2" ]] && help
 			name="$2"
+			shift
+			;;
+		--domain=*)
+			domain="${1#*=}"
+			;;
+		--domain)
+			# don't accept empty name
+			[[ -z "$2" ]] && help
+			domain="$2"
+			shift
+			;;
+		--version=*)
+			version="${1#*=}"
+			;;
+		--version)
+			# don't accept empty name
+			[[ -z "$2" ]] && help
+			version="$2"
+			shift
+			;;
+		--package=*)
+			package="${1#*=}"
+			;;
+		--package)
+			# don't accept empty name
+			[[ -z "$2" ]] && help
+			package="$2"
 			shift
 			;;
 		-r=*|--restore=*)
@@ -154,7 +196,16 @@ while true; do
     shift
 done
 
-# variables that depend on cli args
+cd "$(dirname "$0")"
+
+command="${command:-}"
+name="${name:-template}"
+snapshots="${snapshots:-/var/snapshots}"
+parent="${parent:-/var/www}"
+restore="${restore:-$name}"
+domain="${domain:-$(hostname -f)}"
+version="${version:-HEAD}"
+package="${package:-}"
 root="$parent/$restore"
 dbname="$restore"
 

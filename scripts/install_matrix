@@ -1,102 +1,221 @@
 #!/bin/bash -e
 
+# install_matrix is a refactored version of install_matrix
+# vagrant vm where there was a single install of matrix
+#
+# As such, we now assume:
+#   * you already have postgres and apache correctly configured
+
 cd "$(dirname "$0")"
 scriptdir="$PWD"
 
-version=${1:-HEAD}
-tag="mysource_$version"
-if [[ $version == "HEAD" ]]; then
-	tag=HEAD
-fi
-root=/var/www/matrix
-cache="$scriptdir/../cache"
-dbuser=squiz
-dbuser2=squiz_secondary
-db=matrix
-domain=$(hostname -f)
-email=dschoen@squiz.net
-success_marker=$root/.success
+main() {
+	# If our install success marker exists, we're already done.
+	if ! $force && [[ -f $success_marker ]]; then
+		exit
+	fi
 
-# If our install success marker exists, we're already done.
-[[ -f $success_marker ]] && exit
+	checkout_code
+	configure_db
+	deploy_code
+	adjust_matrix_config
+	matrix_install_steps
+	fix_permissions
+	configure_apache
 
-# Optionally upgrade success marker on older VMs
-# This should only occur on profile VMs.
-if [[ -f /var/www/template/.success ]] && [[ $domain != 'testing.sitemig.dev' ]]; then
+	# Success!
 	touch "$success_marker"
-	exit
-fi
+}
 
-# Remove any half finished installs
-service postgresql stop || true
-rm -rf "$root" /var/lib/pgsql/data/*
+help() {
+	echo
+	echo "Usage: $0 [options]"
+	echo
+	echo "Options:"
+	echo "  --version=<matrix version> in M-m-p format, e.g. 4-2-2 or 'HEAD'"
+	echo "  --name=<name for install> defaults to 'matrix' resulting in matrix installed under /var/www/matrix and a db named 'matrix'"
+	echo "  --domain=<domain matrix should use> defaults to the <name>.<fqdn>"
+	echo "  --package=<optional package> A local directory containing a custom package to add to the system"
+	echo "  --force force a reinstall even if it looks like it's ok"
 
-# Checkout code
-if [[ ! -f $cache/matrix_$tag.tgz ]]; then
-	echo "Checking out Matrix source code for $tag"
-	mkdir -p "$cache"
-	rm -rf -- "$cache/matrix"
-	./checkout.sh "$tag" "$cache/matrix"
-	(
-		cd "$cache"
-		tar czf matrix.tmp matrix
-	)
-	mv -- "$cache/matrix.tmp" "$cache/matrix_$tag.tgz"
-fi
+	exit 1
+}
 
-echo "Configuring PostgreSQL"
-(
-	cd /tmp
-	sudo -u postgres initdb --pgdata='/var/lib/pgsql/data' --auth='trust' --locale=C
-)
 
-# if we're on the unit testing vm...
-if [[ $(hostname -f) == "testing.sitemig.dev" ]]; then
-	# disabling fsync results in a createdb (from template, used for snapper restore runs)
-	# dropping from about 2s to 0.2s
-	# this would be pathological for a prod system, but it's fine for unit testing
-	sed -i -r 's/^.*fsync\s*=.*$/fsync = off/g' /var/lib/pgsql/data/postgresql.conf
-fi
-service postgresql start
-chkconfig postgresql on
+parse_cli() {
+	while true; do
+		# quit if we're out of args
+		[[ -z "$1" ]] && break
+
+		case "$1" in
+			--debug)
+				set -x
+				;;
+			--help)
+				help
+				;;
+			--version=*)
+				version="${1#*=}"
+				;;
+			--version)
+				# don't accept empty name
+				[[ -z "$2" ]] && help
+				version="$2"
+				shift
+				;;
+			--package=*)
+				package="${1#*=}"
+				;;
+			--package)
+				# don't accept empty name
+				[[ -z "$2" ]] && help
+				package="$2"
+				shift
+				;;
+			--name=*)
+				name="${1#*=}"
+				;;
+			--name)
+				# don't accept empty name
+				[[ -z "$2" ]] && help
+				name="$2"
+				shift
+				;;
+			--domain=*)
+				domain="${1#*=}"
+				;;
+			--domain)
+				# don't accept empty domain
+				[[ -z "$2" ]] && help
+				domain="$2"
+				shift
+				;;
+			--force)
+				force=true
+				;;
+			*)
+				echo "ERROR: unknown option $1"
+				help
+				;;
+		esac
+
+		# get next arg
+		shift
+	done
+
+	name=${name:-matrix}
+	version=${version:-HEAD}
+	tag="mysource_$version"
+	if [[ $version == "HEAD" ]]; then
+		tag=HEAD
+	fi
+	root=/var/www/"$name"
+	cache="$scriptdir/../cache"
+	dbuser=squiz
+	dbuser2=squiz_secondary
+	db="$name"
+	domain="${domain:-$name.$(hostname -f)}"
+	email=''
+	success_marker=$root/.success
+	force="${force:-false}"
+} # parse_cli
+
+checkout_code() {
+	if [[ ! -f $cache/matrix_$tag.tgz ]]; then
+		echo "Checking out Matrix source code for $tag"
+		mkdir -p "$cache"
+		rm -rf -- "$cache/matrix"
+		./checkout.sh "$tag" "$cache/matrix"
+		(
+			cd "$cache"
+			tar czf matrix.tmp matrix
+			rm -rf matrix # we're done with the exploded code now
+		)
+		mv -- "$cache/matrix.tmp" "$cache/matrix_$tag.tgz"
+	fi
+}
 
 # Create postgres users and DB
-createuser -SRDU postgres "$dbuser"
-createuser -SRDU postgres "$dbuser2"
-createdb -U postgres -E SQL_ASCII -O "$dbuser" "$db"
-createlang -U postgres plpgsql "$db"
+configure_db() {
+	# users can fail if they already exist
+	createuser -SRDU postgres "$dbuser" || true
+	createuser -SRDU postgres "$dbuser2" || true
+	# drop db if it exists
+	dropdb -U postgres "$db" || true
+	createdb -U postgres -E SQL_ASCII -O "$dbuser" "$db"
+	createlang -U postgres plpgsql "$db"
+}
 
-echo "Deploying Matrix code to install directory"
-(
-	cd /var/www
-	tar xzf "$cache/matrix_$tag.tgz"
-)
+deploy_code() {
+	echo "Deploying Matrix code to install directory"
+	(
+		rm -rf -- "$root"
+		mkdir "$root"
+		cd -- "$root"
+		tar --strip-components 1 -xzf "$cache/matrix_$tag.tgz"
+	)
+	deploy_custom_package
+}
 
-echo "Generate base config - step_01.php"
-php "$root/install/step_01.php" "$root"
+deploy_custom_package() {
+	if [[ ! -z "$package" ]]; then
+		pkg_name="$(get_custom_package_name)"
+		(
+			cd -- "$root"
+			rsync -a --delete "$package/" "packages/$pkg_name/"
+		)
+	fi
+}
 
-echo "Configuring Matrix"
-cp "$scriptdir/templates/db.inc" "$root"/data/private/conf/db.inc
+get_custom_package_name() {
+	(
+		cd "$package"
+		php -r '$doc = new DOMDocument(); $doc->load("package.xml"); echo $doc->getElementsByTagName("code_name")->item(0)->nodeValue;'
+	)
+}
 
-# inlcude requested domain + sitemig.dev as a fall back
-e="s%.*SQ_CONF_SYSTEM_ROOT_URLS.*%define('SQ_CONF_SYSTEM_ROOT_URLS', '$domain\nsitemig.dev');%g"
-e="$e;s%.*SQ_CONF_DEFAULT_EMAIL.*%define('SQ_CONF_DEFAULT_EMAIL', '$email');%g"
-e="$e;s%.*SQ_CONF_TECH_EMAIL.*%define('SQ_CONF_TECH_EMAIL', '$email');%g"
-e="$e;s%.*SQ_CONF_DEBUG.*%define('SQ_CONF_DEBUG', 7);%g"
+adjust_matrix_config() {
+	echo "Generate base config - step_01.php"
+	php "$root/install/step_01.php" "$root"
 
-sed -i "$e" "$root"/data/private/conf/main.inc
+	echo "Configuring Matrix"
+	sed "s/%DBNAME%/$db/g" "$scriptdir/templates/db_v2.inc" > "$root"/data/private/conf/db.inc
 
-echo "Putting schema in to DB - step_02.php"
-php "$root/install/step_02.php" "$root"
+	e="s%.*SQ_CONF_SYSTEM_ROOT_URLS.*%define('SQ_CONF_SYSTEM_ROOT_URLS', '$domain');%g"
+	e="$e;s%.*SQ_CONF_DEFAULT_EMAIL.*%define('SQ_CONF_DEFAULT_EMAIL', '$email');%g"
+	e="$e;s%.*SQ_CONF_TECH_EMAIL.*%define('SQ_CONF_TECH_EMAIL', '$email');%g"
+	e="$e;s%.*SQ_CONF_DEBUG.*%define('SQ_CONF_DEBUG', 7);%g"
 
-echo "Putting data in to Matrix - step_03.php / compile_locale.php"
-php "$root/install/compile_locale.php" "$root"
-php "$root/install/step_03.php" "$root"
-php "$root/install/compile_locale.php" "$root"
+	sed -i "$e" "$root"/data/private/conf/main.inc
+}
 
-echo "Clean up permissions"
-chown -R root.root "$root"
-chown -R apache.apache "$root"/{cache,/data}
+matrix_install_steps() {
+	echo "Putting schema in to DB - step_02.php"
+	php "$root/install/step_02.php" "$root"
 
-# Success!
-touch "$success_marker"
+	echo "Putting data in to Matrix - step_03.php / compile_locale.php"
+	php "$root/install/compile_locale.php" "$root"
+	php "$root/install/step_03.php" "$root"
+	php "$root/install/compile_locale.php" "$root"
+}
+
+fix_permissions() {
+	echo "Clean up permissions"
+	chown -R root.root "$root"
+	chown -R apache.apache "$root"/{cache,/data}
+}
+
+configure_apache() {
+	echo "Configuring apache vhost"
+
+	e="s/%NAME%/$name/g"
+	e="$e;s/%DOMAIN%/$domain/g"
+	mkdir -p /etc/httpd/conf/unversioned-sites
+	sed "$e" "$scriptdir/templates/matrix-vhost.conf" \
+		> /etc/httpd/conf/unversioned-sites/"$name".conf
+	service httpd reload
+}
+
+# parse cli args and then actually start the real code
+parse_cli "$@"
+main

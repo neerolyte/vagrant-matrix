@@ -109,18 +109,33 @@ if ! pear list -c phpunit | egrep -q '^PHPUnit '; then
 fi
 
 # Configure apache
-if [[ /vagrant/scripts/templates/apache-unversioned-include.conf -nt /etc/httpd/conf.d/unversioned-include.conf ]]; then
+if [[ templates/apache-unversioned-include.conf -nt /etc/httpd/conf.d/unversioned-include.conf ]]; then
 	echo "Configuring Apache"
-    cp -f /vagrant/scripts/templates/apache-unversioned-include.conf /etc/httpd/conf.d/unversioned-include.conf
+	mkdir -p /etc/httpd/conf/unversioned-sites
+    cp -f templates/apache-unversioned-include.conf /etc/httpd/conf.d/unversioned-include.conf
     service httpd restart
     chkconfig httpd on
 fi
 
-# don't install guard on centos5
-if [[ $os != "centos5" ]]; then
-	# install for autotesting
-	if ! gem list | grep "^guard-phpunit " -q; then
-		echo "Installing guard-phpunit"
-		gem install guard-phpunit
+if [[ ! -f /var/lib/pgsql/data/.success ]]; then
+	echo "Configuring PostgreSQL"
+	# remove any half finished installs
+	service stop postgresql || true
+	if [[ -d /var/lib/pgsql/data ]]; then
+		mv -f /var/lib/pgsql/data /var/lib/pgsql/data"$(date -Iseconds)"
 	fi
+
+	(
+		cd /tmp
+		sudo -u postgres initdb --pgdata='/var/lib/pgsql/data' --auth='trust' --locale=C
+	)
+
+	# disabling fsync results in a createdb (from template, used for snapper restore runs)
+	# dropping from about 2s to 0.2s
+	# this would be pathological for a prod system, but it's fine for unit testing
+	sed -i -r 's/^.*fsync\s*=.*$/fsync = off/g' /var/lib/pgsql/data/postgresql.conf
+
+	service postgresql start
+	chkconfig postgresql on
+	touch /var/lib/pgsql/data/.success
 fi

@@ -6,6 +6,8 @@ Primarily designed for use under Vagrant but some effort is put in to making pro
 
 Get Vagrant from: http://vagrantup.com/
 
+Please note, this is only for use on development/test VMs, it will probably eat your data and lose you your job. So don't use it with data you like.
+
 # Canonical usage
 
 I'm trying to make it possible to directly reference this repo in your project.
