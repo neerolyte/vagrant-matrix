@@ -5,7 +5,10 @@
 #   * where to get the base box from
 #   * what ip to use
 #   * how to configure the machine
-require "Vagrantfile.inc.rb"
+
+# This require assumes that vagrant-matrix is one directory below the main
+# Vagrantfile
+require File.join(File.dirname(__FILE__), "/vagrant-matrix/Vagrantfile.inc.rb")
 
 Vagrant::Config.run do |config|
 	# Here we inherit from some base portable config
