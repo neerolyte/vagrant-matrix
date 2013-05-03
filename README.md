@@ -12,7 +12,7 @@ I'm trying to make it possible to directly reference this repo in your project.
 
 With Git use a submodule:
    
-    git submodule add git://github.com/neerolyte/vagrant-matrix.git vagrant-matrix
+    git submodule add https://github.com/neerolyte/vagrant-matrix.git vagrant-matrix
 
 With SVN use a SVN external of (svn propedit svn:externals .):
 
