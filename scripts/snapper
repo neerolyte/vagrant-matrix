@@ -113,8 +113,11 @@ function command_restore {
 
 # Install Matrix from scratch and then take a snapshot
 function command_build {
-	command_install_matrix
-	command_create
+	# only build if it doesn't already exist
+	if ! command_check > /dev/null 2>&1; then
+		command_install_matrix
+		command_create
+	fi
 }
 
 # Install Matrix
