@@ -114,7 +114,7 @@ function command_restore {
 # Install Matrix from scratch and then take a snapshot
 function command_build {
 	# only build if it doesn't already exist
-	if ! command_check > /dev/null 2>&1; then
+	if ! [[ -d "$snapshots/$name" ]]; then
 		command_install_matrix
 		command_create
 	fi
