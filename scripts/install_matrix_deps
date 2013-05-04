@@ -44,9 +44,6 @@ rpms=(
 
 	# used during template generation/restoration
 	rsync
-
-	# needed for guard
-	rubygems
 )
 
 if [[ $os == 'sl6' ]]; then
