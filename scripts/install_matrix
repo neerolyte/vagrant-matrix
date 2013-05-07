@@ -20,6 +20,7 @@ main() {
 	deploy_code
 	adjust_matrix_config
 	matrix_install_steps
+	post_install_config
 	fix_permissions
 	configure_apache
 
@@ -185,6 +186,14 @@ adjust_matrix_config() {
 	e="$e;s%.*SQ_CONF_DEFAULT_EMAIL.*%define('SQ_CONF_DEFAULT_EMAIL', '$email');%g"
 	e="$e;s%.*SQ_CONF_TECH_EMAIL.*%define('SQ_CONF_TECH_EMAIL', '$email');%g"
 	e="$e;s%.*SQ_CONF_DEBUG.*%define('SQ_CONF_DEBUG', 7);%g"
+
+	sed -i "$e" "$root"/data/private/conf/main.inc
+}
+
+post_install_config() {
+	echo "Adjusting post install config"
+
+	e="s|.*SQ_CONF_ASSET_MAP_ASSET_DISPLAY_NAME.*|define('SQ_CONF_ASSET_MAP_ASSET_DISPLAY_NAME', '%asset_short_name% (%asset_assetid%)');|g"
 
 	sed -i "$e" "$root"/data/private/conf/main.inc
 }
