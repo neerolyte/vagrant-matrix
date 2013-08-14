@@ -1,0 +1,26 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# The Vagrantfile lets Vagrant know:
+#   * where to get the base box from
+#   * what ip to use
+#   * how to configure the machine
+
+Vagrant.configure("2") do |config|
+  config.vm.hostname = "vagrant-matrix.dev"
+
+  # Where to get the basebox from
+  config.vm.box = "sl6-matrix-64-lyte"
+  config.vm.box_url = "http://lyte.id.au/vagrant/sl6-matrix-64-lyte.box"
+
+  # Share vagrant-matrix directory as /vagrant/matrix
+  config.vm.synced_folder File.dirname(__FILE__), "/vagrant/matrix"
+
+  # What to run to configure the VM
+  config.vm.provision :shell, :inline => "/vagrant/matrix/scripts/install_matrix_deps"
+  # get snapper to build a matrix install for use by testing
+  config.vm.provision :shell, :inline => "/vagrant/matrix/scripts/snapper build --name=matrix --domain=vagrant-matrix.dev --version=HEAD"
+
+	# IP the VM will run on
+	config.vm.network :private_network, ip: "192.168.33.10"
+end
