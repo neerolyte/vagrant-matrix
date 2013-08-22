@@ -143,7 +143,7 @@ configure_db() {
 	createuser -SRDU postgres "$dbuser2" || true
 	# drop db if it exists
 	dropdb -U postgres "$db" || true
-	createdb -U postgres -E SQL_ASCII -O "$dbuser" "$db"
+	createdb -U postgres -E UTF8 -T template0 -O "$dbuser" "$db"
 	createlang -U postgres plpgsql "$db"
 }
 
