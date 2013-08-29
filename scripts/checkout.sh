@@ -46,7 +46,7 @@ fi
 
 # What do we need to check out?
 PACKAGES="bulkmail calendar cms data ecommerce filesystem funnelback google_maps import_tools ipb ldap news saml search sharepoint squid squiz_suite trim web_services"
-FUDGE_PACKAGES="antivirus colour csv datetime_field db_extras dev file_versioning general image image_editor js_calendar ldap mollom rss_feeds standards_lists var_serialise wysiwyg"
+FUDGE_PACKAGES="antivirus colour csv datetime_field db_extras dev file_versioning general image image_editor js_calendar ldap mollom rss_feeds standards_lists var_serialise wysiwyg recaptcha"
 
 if [ -d $CHECKOUT_DIR ]; then
 	echo "Directory $CHECKOUT_DIR already exists, aborting."
