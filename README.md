@@ -2,7 +2,7 @@
 
 vagrant-matrix is no longer maintained.
 
-Squiz no longer provide any publicly accessible repo for Squiz Matrix so there's no trivial way for vagrant-matrix to continue to function in it's existing form.
+Squiz no longer provide any publicly accessible repo for Squiz Matrix so there's no trivial way for vagrant-matrix to continue to function in its existing form.
 
 The code is left up in case someone finds it useful. If you want to take it and turn it in to something else and you need some specific FOSS license on it, just ask me, I'll probably grant it.
 
